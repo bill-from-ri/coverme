@@ -1,3 +1,4 @@
+<img src="coverme-logo.png" alt="logo" width="200"/>
 
 # Cover Me
 
