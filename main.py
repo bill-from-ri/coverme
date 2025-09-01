@@ -5,11 +5,12 @@ from pydantic import BaseModel
 from typing import Optional
 import os
 from dotenv import load_dotenv
-import google.generativeai as genai
 from pypdf import PdfReader
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
+from langchain_google_genai import ChatGoogleGenerativeAI
+from textwrap import wrap
 
 # Load environment variables
 load_dotenv()
@@ -26,13 +27,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize Gemini API
+# Initialize LangChain Google Generative AI (Gemini) via ChatGoogleGenerativeAI
+llm = None
 try:
-    genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-    model = genai.GenerativeModel('gemini-pro')
+    # Prefer GOOGLE_API_KEY, fallback to GEMINI_API_KEY for convenience
+    google_key = os.getenv("GOOGLE_API_KEY")
+    if not google_key:
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        if gemini_key:
+            os.environ["GOOGLE_API_KEY"] = gemini_key
+            google_key = gemini_key
+    if not google_key:
+        raise RuntimeError("Missing GOOGLE_API_KEY (or GEMINI_API_KEY as fallback)")
+
+    llm = ChatGoogleGenerativeAI(
+        model="gemini-2.5-flash",
+        temperature=0.5,
+    )
 except Exception as e:
-    print(f"Warning: Failed to initialize Gemini API: {e}")
-    model = None
+    print(f"Warning: Failed to initialize ChatGoogleGenerativeAI: {e}")
+    llm = None
 
 class CoverLetterRequest(BaseModel):
     job_description: str
@@ -80,7 +94,8 @@ def save_text_as_pdf(text: str, out_path: str, title: Optional[str] = None):
             y -= 0.3 * inch
         c.setFont("Times-Roman", 11)
         for line in text.splitlines():
-            for subline in [line[i:i+95] for i in range(0, len(line), 95) or [""]]:
+            sublines = wrap(line, width=95) or [""]
+            for subline in sublines:
                 if y < 1 * inch:
                     c.showPage()
                     y = height - 1 * inch
@@ -107,7 +122,7 @@ async def read_root():
 
 @app.post("/api/generate-cover-letter")
 async def generate_cover_letter(request: CoverLetterRequest):
-    if not model:
+    if not llm:
         raise HTTPException(status_code=500, detail="Gemini API not properly configured")
     
     try:
@@ -149,21 +164,21 @@ async def generate_cover_letter(request: CoverLetterRequest):
         Additional Context:
         {request.additional_context or 'None provided'}
         
-        Use this template format (as stylistic guidance), but replace the content with relevant information:
+        Use this template format as a base for your letter. Retain the general structure and formatting, but replace placeholders and irrelevant content with relevant information:
         {template_text}
         """
         
-        # Generate response
-        response = model.generate_content(prompt)
-        
-        return {"cover_letter": response.text}
+        # Generate response via LangChain
+        response = llm.invoke(prompt)
+        text = getattr(response, "content", None) or str(response)
+        return {"cover_letter": text}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating cover letter: {str(e)}")
 
 @app.post("/api/respond-to-prompt")
 async def respond_to_prompt(request: PromptRequest):
-    if not model:
+    if not llm:
         raise HTTPException(status_code=500, detail="Gemini API not properly configured")
     
     try:
@@ -213,10 +228,10 @@ async def respond_to_prompt(request: PromptRequest):
         Please provide a professional and well-structured response.
         """
         
-        # Generate response
-        response = model.generate_content(prompt)
-        
-        return {"response": response.text}
+        # Generate response via LangChain
+        response = llm.invoke(prompt)
+        text = getattr(response, "content", None) or str(response)
+        return {"response": text}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating response: {str(e)}")
@@ -251,7 +266,7 @@ async def list_cover_letters():
     files = []
     if os.path.isdir(COVER_LETTER_DIR):
         for name in os.listdir(COVER_LETTER_DIR):
-            if name.lower().endswith(('.pdf', '.txt')):
+            if name.lower().endswith(('.pdf')):
                 files.append({
                     "name": os.path.splitext(name)[0],
                     "filename": name,

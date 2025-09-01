@@ -1,3 +1,4 @@
+
 # Job Application Assistant
 
 A browser-based tool that helps you quickly generate cover letters and respond to job application prompts using AI.
@@ -6,7 +7,9 @@ A browser-based tool that helps you quickly generate cover letters and respond t
 
 - **Cover Letter Generator**: Create personalized cover letters from job descriptions
 - **Prompt Responder**: Get AI-generated responses to application questions
-- **Easy to Use**: Simple browser bookmarklet interface
+- **Standalone Frontend**: Open `frontend.html` directly in your browser to use the app
+- **PDF Workflow**: Upload your resume and cover letter template as PDFs
+- **Edit & Save**: Manually edit generated text and save as PDF/TXT to `data/cover_letters/`
 - **Privacy-Focused**: All processing happens on your local machine (backend required)
 
 ## Setup
@@ -17,42 +20,60 @@ A browser-based tool that helps you quickly generate cover letters and respond t
    ```
 
 2. **Set Up Environment Variables**:
-   Create a `.env` file in the project root with your Gemini API key:
+   Create a `.env` file in the project root. The backend uses LangChain's Google GenAI wrapper and reads `GOOGLE_API_KEY`. For convenience, it will fall back to `GEMINI_API_KEY` if present.
    ```
+   # Preferred
+   GOOGLE_API_KEY=your_api_key_here
+
+   # Optional fallback (used only if GOOGLE_API_KEY is not set)
    GEMINI_API_KEY=your_api_key_here
    ```
 
-3. **Create Template Files**:
-   - Create a `templates` directory and add a `cover_letter_template.txt` file with your preferred template
-   - Create a `data` directory and add your `resume.txt` and `cover_letter.txt` files
+3. **Prepare Local Folders (auto-created if missing)**:
+   - `data/` stores your resume (`resume.pdf`), and saved cover letters in `data/cover_letters/`
+   - `templates/` stores your cover letter template (e.g., `cover_letter_template.pdf`)
+   - These directories are ignored by git to protect your private files
 
 4. **Start the Backend Server**:
    ```bash
-   python main.py
+   uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
    The server will start at `http://localhost:8000`
 
-## Install the Bookmarklet
+## Use the Standalone Frontend (recommended)
+
+Open `frontend.html` in your browser (double-click it or use `file:///` path). It connects to the local API at `http://localhost:8000`.
+
+### Frontend Tabs
+
+- **Uploads**: Upload your Resume (PDF) and Template (PDF)
+- **Cover Letter**: Generate from a job description, edit the result, and save it as a cover letter (PDF/TXT)
+- **Prompt**: Select one of your saved cover letters and generate an answer to an application prompt
+
+## Install the Bookmarklet (optional)
 
 1. Copy the entire contents of `bookmarklet.js`
 2. Create a new bookmark in your browser
 3. Edit the bookmark and paste the code as the URL (make sure to include the `javascript:` prefix)
 4. Save the bookmark
+5. Note: Some sites block bookmarklets from making external requests. If blocked, use `frontend.html` instead.
 
 ## Usage
 
-1. Navigate to a job posting
-2. Click the bookmarklet to open the Job Application Assistant
-3. Select text on the page to automatically capture it as a job description
-4. Choose between generating a cover letter or responding to a prompt
-5. Click the respective button to generate content
-6. Review and copy the generated content
+1. Start the backend server (see Setup step 4)
+2. Open `frontend.html` in your browser
+3. In the **Uploads** tab, upload:
+   - Resume as `PDF`
+   - Cover letter template as `PDF`
+4. In **Cover Letter** tab, paste the job description, click Generate, edit if needed, and Save as a cover letter
+5. In **Prompt** tab, pick a saved cover letter, enter the prompt, and generate a response (editable)
 
 ## Customization
 
-- Edit `templates/cover_letter_template.txt` to customize the cover letter format
-- Modify the prompt in `main.py` to change how the AI generates responses
-- Adjust the styling in `bookmarklet.js` to match your preferences
+- Templates: place your template PDF in `templates/` (default name: `cover_letter_template.pdf`). You can specify a different template by name in the UI.
+- Prompts: tweak prompt construction in `main.py` inside `generate_cover_letter()` and `respond_to_prompt()`.
+- Styling: adjust UI in `frontend.html` and `bookmarklet.js`.
+- Storage: cover letters are saved under `data/cover_letters/` as both `.pdf` and `.txt`.
 
 ## Requirements
 

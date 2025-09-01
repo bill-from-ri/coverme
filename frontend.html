@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Job Application Assistant</title>
+  <style>
+    :root {
+      --bg:#1f2230; --panel:#2a2f44; --text:#fff; --muted:#cfd3e0; --accent:#4CAF50; --accent2:#2196F3; --accent3:#ff9800; --accent4:#9C27B0;
+    }
+    html, body { height:100%; }
+    body { margin:0; background:linear-gradient(135deg,#1a1c28,#11131d); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+    .wrapper { max-width:1000px; margin:0 auto; padding:24px; }
+    .card { background:rgba(42,47,68,0.9); border-radius:12px; box-shadow:0 8px 30px rgba(0,0,0,0.3); overflow:hidden; }
+    .header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; background:rgba(50,56,80,0.9); }
+    .title { font-weight:700; }
+    .tabs { display:flex; border-bottom:1px solid rgba(255,255,255,0.12); }
+    .tab { flex:1; background:transparent; color:var(--text); border:none; padding:12px; cursor:pointer; font-weight:600; }
+    .tab.active { background:rgba(255,255,255,0.1); }
+    .content { padding:16px; }
+    label { display:block; margin:8px 0 4px; font-size:14px; color:var(--muted); }
+    textarea, input[type="text"], input[type="search"], input[type="file"], select { width:100%; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.25); color:var(--text); }
+    textarea { min-height:80px; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .btn { padding:10px 14px; border:none; border-radius:8px; color:#fff; cursor:pointer; font-weight:600; }
+    .btn.green{ background:var(--accent); }
+    .btn.blue{ background:var(--accent2); }
+    .btn.orange{ background:var(--accent3); }
+    .btn.purple{ background:var(--accent4); }
+    .mt8{ margin-top:8px; } .mt12{ margin-top:12px; } .mt16{ margin-top:16px; }
+    .small { color:var(--muted); font-size:12px; }
+    .two-col { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    @media (max-width: 720px){ .two-col{ grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="card">
+      <div class="header">
+        <div class="title">Job Application Assistant</div>
+        <div class="small">Backend: http://localhost:8000</div>
+      </div>
+      <div class="tabs">
+        <button id="tab-cover" class="tab active">Cover Letter</button>
+        <button id="tab-prompt" class="tab">Prompt</button>
+        <button id="tab-uploads" class="tab">Uploads</button>
+      </div>
+      <div id="content" class="content"></div>
+    </div>
+  </div>
+
+  <script>
+    const BASE = 'http://localhost:8000';
+
+    const content = document.getElementById('content');
+    const tabCover = document.getElementById('tab-cover');
+    const tabPrompt = document.getElementById('tab-prompt');
+    const tabUploads = document.getElementById('tab-uploads');
+
+    function setActive(tab){
+      [tabCover, tabPrompt, tabUploads].forEach(b => b.classList.remove('active'));
+      if (tab==='cover') { tabCover.classList.add('active'); renderCover(); }
+      else if (tab==='prompt') { tabPrompt.classList.add('active'); renderPrompt(); }
+      else { tabUploads.classList.add('active'); renderUploads(); }
+    }
+    tabCover.onclick = () => setActive('cover');
+    tabPrompt.onclick = () => setActive('prompt');
+    tabUploads.onclick = () => setActive('uploads');
+
+    async function fetchCoverLetters(){
+      try {
+        const res = await fetch(`${BASE}/api/list-cover-letters`);
+        const data = await res.json();
+        return data.items || [];
+      } catch(e){ return []; }
+    }
+
+    function renderCover(){
+      content.innerHTML = `
+        <label>Job Description</label>
+        <textarea id="job-desc"></textarea>
+        <label>Additional Context (optional)</label>
+        <textarea id="job-context"></textarea>
+        <div class="two-col mt8">
+          <div>
+            <label>Template Name (optional, without .pdf)</label>
+            <input id="template-name" type="text" placeholder="cover_letter_template" />
+          </div>
+          <div>
+            <label>Save As Name</label>
+            <input id="cover-save-name" type="text" placeholder="my_cover_letter" />
+          </div>
+        </div>
+        <div class="mt12">
+          <button id="cover-generate" class="btn green">Generate Cover Letter</button>
+          <button id="cover-save" class="btn purple">Save as Cover Letter (PDF)</button>
+        </div>
+        <label class="mt12">Edit Result</label>
+        <textarea id="cover-edit" style="min-height:220px;"></textarea>
+        <div id="cover-status" class="small mt8"></div>
+      `;
+
+      const status = document.getElementById('cover-status');
+      document.getElementById('cover-generate').onclick = async () => {
+        const job_description = document.getElementById('job-desc').value;
+        const additional_context = document.getElementById('job-context').value;
+        const template_name = document.getElementById('template-name').value || null;
+        status.textContent = 'Loading...';
+        try {
+          const res = await fetch(`${BASE}/api/generate-cover-letter`, {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ job_description, additional_context, template_name })
+          });
+          const data = await res.json();
+          document.getElementById('cover-edit').value = data.cover_letter || JSON.stringify(data);
+          status.textContent = 'Done. You can edit and save as a cover letter.';
+        } catch(e){ status.textContent = 'Error: ' + e.message; }
+      };
+
+      document.getElementById('cover-save').onclick = async () => {
+        const name = (document.getElementById('cover-save-name').value || 'cover_letter').trim();
+        const contentText = document.getElementById('cover-edit').value;
+        if (!name) { status.textContent = 'Please enter a name.'; return; }
+        status.textContent = 'Saving...';
+        try {
+          const res = await fetch(`${BASE}/api/save-cover-letter`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ name, content: contentText })
+          });
+          const data = await res.json();
+          status.textContent = data.message || JSON.stringify(data);
+        } catch(e){ status.textContent = 'Error: ' + e.message; }
+      };
+    }
+
+    function renderPrompt(){
+      content.innerHTML = `
+        <label>Prompt</label>
+        <textarea id="prompt-text"></textarea>
+        <label>Additional Context (optional)</label>
+        <textarea id="prompt-context"></textarea>
+        <div class="two-col mt8">
+          <div>
+            <label>Search Cover Letters</label>
+            <input id="cl-filter" type="search" placeholder="Search..." />
+          </div>
+          <div>
+            <label>Pick a Cover Letter</label>
+            <select id="cl-select" size="4"></select>
+          </div>
+        </div>
+        <div class="mt12 row">
+          <button id="prompt-submit" class="btn blue" style="flex:1;">Submit Prompt</button>
+          <label class="btn orange" for="cl-upload" style="display:inline-block;">Upload Cover Letter</label>
+          <input id="cl-upload" type="file" accept=".pdf,.txt" style="display:none;" />
+        </div>
+        <label class="mt12">Edit Result</label>
+        <textarea id="prompt-edit" style="min-height:220px;"></textarea>
+      `;
+
+      (async () => {
+        const items = await fetchCoverLetters();
+        const sel = document.getElementById('cl-select');
+        const filter = document.getElementById('cl-filter');
+        const render = (q='') => {
+          sel.innerHTML = items
+            .filter(i => i.name.toLowerCase().includes(q.toLowerCase()))
+            .map(i => `<option value="${i.name}">${i.name}</option>`)
+            .join('');
+        };
+        render();
+        filter.oninput = () => render(filter.value);
+      })();
+
+      document.getElementById('cl-upload').onchange = async (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        const fd = new FormData(); fd.append('file', f);
+        try { await fetch(`${BASE}/api/upload-cover-letter`, { method:'POST', body: fd }); renderPrompt(); }
+        catch(e){ alert('Upload failed: ' + e.message); }
+      };
+
+      document.getElementById('prompt-submit').onclick = async () => {
+        const prompt = document.getElementById('prompt-text').value;
+        const additional_context = document.getElementById('prompt-context').value;
+        const sel = document.getElementById('cl-select');
+        const chosen = sel && sel.value ? sel.value : null;
+        const out = document.getElementById('prompt-edit');
+        out.value = 'Loading...';
+        try {
+          const res = await fetch(`${BASE}/api/respond-to-prompt`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ prompt, additional_context, cover_letter_name: chosen })
+          });
+          const data = await res.json();
+          out.value = data.response || JSON.stringify(data);
+        } catch(e){ out.value = 'Error: ' + e.message; }
+      };
+    }
+
+    function renderUploads(){
+      content.innerHTML = `
+        <div class="two-col">
+          <div>
+            <label>Upload Resume (PDF)</label>
+            <input id="resume-file" type="file" accept="application/pdf" />
+            <button id="resume-upload" class="btn green mt8">Upload Resume</button>
+          </div>
+          <div>
+            <label>Upload Cover Letter Template (PDF)</label>
+            <input id="tpl-file" type="file" accept="application/pdf" />
+            <button id="tpl-upload" class="btn orange mt8">Upload Template</button>
+          </div>
+        </div>
+        <div id="upload-status" class="small mt12"></div>
+      `;
+
+      const status = document.getElementById('upload-status');
+      document.getElementById('resume-upload').onclick = async () => {
+        const f = document.getElementById('resume-file').files[0];
+        if (!f) { status.textContent = 'Please choose a PDF'; return; }
+        const fd = new FormData(); fd.append('file', f);
+        status.textContent = 'Uploading resume...';
+        try { await fetch(`${BASE}/api/upload-resume`, { method:'POST', body:fd }); status.textContent = 'Resume uploaded.'; }
+        catch(e){ status.textContent = 'Error: ' + e.message; }
+      };
+      document.getElementById('tpl-upload').onclick = async () => {
+        const f = document.getElementById('tpl-file').files[0];
+        if (!f) { status.textContent = 'Please choose a PDF'; return; }
+        const fd = new FormData(); fd.append('file', f);
+        status.textContent = 'Uploading template...';
+        try { await fetch(`${BASE}/api/upload-template`, { method:'POST', body:fd }); status.textContent = 'Template uploaded.'; }
+        catch(e){ status.textContent = 'Error: ' + e.message; }
+      };
+    }
+
+    // initial
+    setActive('cover');
+  </script>
+</body>
+</html>
